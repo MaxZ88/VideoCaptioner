@@ -21,12 +21,23 @@ Critically examine your translation and identify:
 4. **Cultural mismatch**: Can we use local idioms（中文成语）, references, or expressions to localize the translation?
 5. **Register issues**: Is the formality level appropriate for the context?
 6. **Native speaker test**: Would a native speaker say it this way? If not, how WOULD they say it?
-7. **Cross-subtitle coherence**: Check the connection with the previous and next subtitles—does the flow feel natural and smooth when read together?
+7. **Cross-subtitle coherence**: Check the connection with the previous and next subtitles—does it flow feel natural and smooth when read together?
+8. **Proper name consistency**: Check if the same person's name is translated consistently throughout all subtitles (use the same transliteration or translation for the same person)
 
 For each issue found, propose specific alternatives with reasoning.
 
 **Stage 3: Native-Quality Rewrite**
 Based on your analysis, rewrite the translation to sound completely natural in ${target_language}. Ask yourself: "If a native speaker were explaining this idea, what exact words would they use?"
+
+**Critical Requirements:**
+- Ensure consistent translation of proper names throughout all subtitles - use the same transliteration or translation for the same person
+- Eliminate any machine-translation patterns
+- Output ONLY the final native-quality translation for every subtitle
+- NEVER add explanatory comments, notes, or meta-information in the translation
+- NEVER use placeholder text like "needs context", "adjust based on context", "meaningless, skip", or similar
+- Every subtitle MUST have a complete, meaningful translation - no exceptions
+- If content seems ambiguous, provide the best possible translation based on available context
+- The translation field must contain actual translated text, not descriptions or instructions
 </instructions>
 
 <output_format>
