@@ -80,6 +80,7 @@ class BatchProcessInterface(QWidget):
 
         # 控制按钮
         self.add_file_btn = PushButton(self.tr("添加文件"), icon=FIF.ADD)
+        self.retry_failed_btn = PushButton(self.tr("重试失败"), icon=FIF.SYNC)
         self.start_all_btn = PushButton(self.tr("开始处理"), icon=FIF.PLAY)
         self.clear_btn = PushButton(self.tr("清空列表"), icon=FIF.DELETE)
 
@@ -87,6 +88,7 @@ class BatchProcessInterface(QWidget):
         top_layout.addWidget(self.task_type_combo)
         top_layout.addWidget(self.add_file_btn)
         top_layout.addWidget(self.clear_btn)
+        top_layout.addWidget(self.retry_failed_btn)
 
         top_layout.addStretch()
         top_layout.addWidget(self.start_all_btn)
@@ -124,8 +126,12 @@ class BatchProcessInterface(QWidget):
         main_layout.addLayout(top_layout)
         main_layout.addWidget(self.task_table)
 
+        # 初始化重试按钮状态
+        self.update_retry_button_state()
+
         # 连接信号
         self.add_file_btn.clicked.connect(self.on_add_file_clicked)
+        self.retry_failed_btn.clicked.connect(self.retry_failed_tasks)
         self.start_all_btn.clicked.connect(self.start_all_tasks)
         self.clear_btn.clicked.connect(self.clear_tasks)
         self.task_type_combo.currentTextChanged.connect(self.on_task_type_changed)
@@ -350,6 +356,7 @@ class BatchProcessInterface(QWidget):
                 status_item.setText(str(BatchTaskStatus.FAILED))
                 status_item.setToolTip(error)
                 break
+        self.update_retry_button_state()
 
     def on_task_completed(self, file_path: str):
         for row in range(self.task_table.rowCount()):
@@ -424,6 +431,54 @@ class BatchProcessInterface(QWidget):
         batch_task = BatchTask(file_path, task_type)
         self.batch_thread.add_task(batch_task)
 
+    def retry_failed_tasks(self):
+        """重试所有失败的任务"""
+        failed_tasks = []
+        for row in range(self.task_table.rowCount()):
+            status = self.task_table.item(row, 2).text()
+            if status == str(BatchTaskStatus.FAILED):
+                file_path = self.task_table.item(row, 0).toolTip()
+                failed_tasks.append(file_path)
+
+        if not failed_tasks:
+            InfoBar.warning(
+                title="无失败任务",
+                content="没有需要重试的失败任务",
+                duration=INFOBAR_DURATION_WARNING,
+                position=InfoBarPosition.TOP,
+                parent=self,
+            )
+            return
+
+        # 显示重试提示
+        InfoBar.success(
+            title=self.tr("重试失败任务"),
+            content=f"开始重试 {len(failed_tasks)} 个失败的任务",
+            duration=INFOBAR_DURATION_SUCCESS,
+            position=InfoBarPosition.TOP,
+            parent=self,
+        )
+
+        # 重试所有失败的任务
+        task_type = BatchTaskType(self.task_type_combo.currentText())
+        for file_path in failed_tasks:
+            # 重置任务状态
+            for row in range(self.task_table.rowCount()):
+                if self.task_table.item(row, 0).toolTip() == file_path:
+                    # 重置状态为等待中
+                    status_item = self.task_table.item(row, 2)
+                    status_item.setText(str(BatchTaskStatus.WAITING))
+                    status_item.setForeground(Qt.gray)
+                    status_item.setToolTip("")
+                    # 重置进度条
+                    progress_bar = self.task_table.cellWidget(row, 1)
+                    progress_bar.setValue(0)
+                    break
+
+            # 重新添加到处理队列
+            batch_task = BatchTask(file_path, task_type)
+            self.batch_thread.add_task(batch_task)
+
     def cancel_task(self, file_path: str):
         self.batch_thread.stop_task(file_path)
         # 从表格中移除任务
@@ -435,6 +490,17 @@ class BatchProcessInterface(QWidget):
     def clear_tasks(self):
         self.batch_thread.stop_all()
         self.task_table.setRowCount(0)
+        self.update_retry_button_state()
+
+    def update_retry_button_state(self):
+        """更新重试失败按钮的状态"""
+        has_failed_tasks = False
+        for row in range(self.task_table.rowCount()):
+            status = self.task_table.item(row, 2).text()
+            if status == str(BatchTaskStatus.FAILED):
+                has_failed_tasks = True
+                break
+        self.retry_failed_btn.setEnabled(has_failed_tasks)
 
     def on_task_type_changed(self, task_type: str):
         # 显示任务类型说明
