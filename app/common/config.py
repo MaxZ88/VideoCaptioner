@@ -1,7 +1,6 @@
 # coding:utf-8
 from enum import Enum
 
-from PyQt5.QtCore import QLocale
 from PyQt5.QtGui import QColor
 from qfluentwidgets import (
     BoolValidator,
@@ -24,6 +23,7 @@ from app.core.utils.platform_utils import get_available_transcribe_models
 from ..core.entities import (
     FasterWhisperModelEnum,
     LLMServiceEnum,
+    SoftSubtitleFormatEnum,
     SubtitleLayoutEnum,
     SubtitleRenderModeEnum,
     TranscribeLanguageEnum,
@@ -35,25 +35,6 @@ from ..core.entities import (
     WhisperModelEnum,
 )
 from ..core.translate.types import TargetLanguage
-
-
-class Language(Enum):
-    """软件语言"""
-
-    CHINESE_SIMPLIFIED = QLocale(QLocale.Chinese, QLocale.China)
-    CHINESE_TRADITIONAL = QLocale(QLocale.Chinese, QLocale.HongKong)
-    ENGLISH = QLocale(QLocale.English)
-    AUTO = QLocale()
-
-
-class LanguageSerializer(ConfigSerializer):
-    """Language serializer"""
-
-    def serialize(self, language):
-        return language.value.name() if language != Language.AUTO else "Auto"
-
-    def deserialize(self, value: str):
-        return Language(QLocale(value)) if value != "Auto" else Language.AUTO
 
 
 class PlatformAwareTranscribeModelValidator(OptionsValidator):
@@ -137,8 +118,17 @@ class Config(QConfig):
     need_reflect_translate = ConfigItem(
         "Translate", "NeedReflectTranslate", False, BoolValidator()
     )
+    need_unify_names = ConfigItem(
+        "Translate", "NeedUnifyNames", False, BoolValidator()
+    )
     deeplx_endpoint = ConfigItem("Translate", "DeeplxEndpoint", "")
-    batch_size = RangeConfigItem("Translate", "BatchSize", 10, RangeValidator(5, 50))
+    use_dynamic_batch = ConfigItem(
+        "Translate", "UseDynamicBatch", False, BoolValidator()
+    )
+    target_token_limit = RangeConfigItem(
+        "Translate", "TargetTokenLimit", 4000, RangeValidator(1000, 32000)
+    )
+    batch_size = RangeConfigItem("Translate", "BatchSize", 10, RangeValidator(5, 100))
     thread_num = RangeConfigItem("Translate", "ThreadNum", 10, RangeValidator(1, 50))
 
     # ------------------- 转录配置 -------------------
@@ -242,6 +232,13 @@ class Config(QConfig):
 
     # ------------------- 字幕合成配置 -------------------
     soft_subtitle = ConfigItem("Video", "SoftSubtitle", False, BoolValidator())
+    soft_subtitle_format = OptionsConfigItem(
+        "Video",
+        "SoftSubtitleFormat",
+        SoftSubtitleFormatEnum.SRT,
+        OptionsValidator(SoftSubtitleFormatEnum),
+        EnumSerializer(SoftSubtitleFormatEnum),
+    )
     need_video = ConfigItem("Video", "NeedVideo", True, BoolValidator())
     video_quality = OptionsConfigItem(
         "Video",
@@ -301,6 +298,9 @@ class Config(QConfig):
 
     # ------------------- 保存配置 -------------------
     work_dir = ConfigItem("Save", "Work_Dir", WORK_PATH, FolderValidator())
+    skip_existing_subtitle = ConfigItem(
+        "Save", "SkipExistingSubtitle", False, BoolValidator()
+    )
 
     # ------------------- 软件页面配置 -------------------
     micaEnabled = ConfigItem("MainWindow", "MicaEnabled", False, BoolValidator())
@@ -309,14 +309,6 @@ class Config(QConfig):
         "DpiScale",
         "Auto",
         OptionsValidator([1, 1.25, 1.5, 1.75, 2, "Auto"]),
-        restart=True,
-    )
-    language = OptionsConfigItem(
-        "MainWindow",
-        "Language",
-        Language.AUTO,
-        OptionsValidator(Language),
-        LanguageSerializer(),
         restart=True,
     )
 

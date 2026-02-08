@@ -313,7 +313,7 @@ class BatchProcessInterface(QWidget):
         open_folder_action.triggered.connect(lambda: self.open_output_folder(file_path))
         menu.addAction(open_folder_action)
 
-        if status != str(BatchTaskStatus.WAITING):
+        if status not in [str(BatchTaskStatus.WAITING), str(BatchTaskStatus.FAILED), str(BatchTaskStatus.SKIPPED)]:
             start_action.setEnabled(False)
 
         menu.exec_(self.task_table.viewport().mapToGlobal(pos))
@@ -354,8 +354,13 @@ class BatchProcessInterface(QWidget):
     def on_task_completed(self, file_path: str):
         for row in range(self.task_table.rowCount()):
             if self.task_table.item(row, 0).toolTip() == file_path:
-                self.task_table.item(row, 2).setText(str(BatchTaskStatus.COMPLETED))
-                self.task_table.item(row, 2).setForeground(QColor("#13A10E"))
+                status_item = self.task_table.item(row, 2)
+                current_status = status_item.text()
+                if current_status == str(BatchTaskStatus.SKIPPED):
+                    status_item.setForeground(QColor("#FFA500"))
+                else:
+                    status_item.setText(str(BatchTaskStatus.COMPLETED))
+                    status_item.setForeground(QColor("#13A10E"))
                 break
 
     def start_all_tasks(self):

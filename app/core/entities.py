@@ -101,6 +101,15 @@ class TranscribeOutputFormatEnum(Enum):
     ALL = "All"
 
 
+class SoftSubtitleFormatEnum(Enum):
+    """软字幕输出格式"""
+
+    SRT = "srt"
+    ASS = "ass"
+    VTT = "vtt"
+    LRC = "lrc"
+
+
 class LLMServiceEnum(Enum):
     """LLM服务"""
 
@@ -579,8 +588,11 @@ class SubtitleConfig:
     need_translate: bool = False
     need_optimize: bool = False
     need_reflect: bool = False
+    need_unify_names: bool = False
     thread_num: int = 10
     batch_size: int = 10
+    use_dynamic_batch: bool = False
+    target_token_limit: int = 4000
     # 字幕布局和分割
     subtitle_layout: SubtitleLayoutEnum = SubtitleLayoutEnum.ORIGINAL_ON_TOP
     max_word_count_cjk: int = 12
@@ -621,13 +633,18 @@ class SubtitleConfig:
                 lines.append(f"  API Key: {self._mask_key(self.api_key)}")
                 lines.append(f"  Model: {self.llm_model}")
                 lines.append(f"  Reflect Translation: {self.need_reflect}")
+                lines.append(f"  Unify Names: {self.need_unify_names}")
             elif self.translator_service == TranslatorServiceEnum.DEEPLX:
                 lines.append(f"  DeepLX Endpoint: {self.deeplx_endpoint}")
             lines.append(
                 f"  Target Language: {self.target_language.value if self.target_language else 'None'}"
             )
             lines.append(f"  Concurrency: {self.thread_num}")
-            lines.append(f"  Batch Size: {self.batch_size}")
+            if self.use_dynamic_batch:
+                lines.append(f"  Dynamic Batch: Enabled")
+                lines.append(f"  Target Token Limit: {self.target_token_limit}")
+            else:
+                lines.append(f"  Batch Size: {self.batch_size}")
 
         lines.append(f"Layout: {self.subtitle_layout.value}")
         lines.append("=" * 48)
@@ -640,6 +657,7 @@ class SynthesisConfig:
 
     need_video: bool = True
     soft_subtitle: bool = True
+    soft_subtitle_format: "SoftSubtitleFormatEnum" = None
     render_mode: SubtitleRenderModeEnum = SubtitleRenderModeEnum.ASS_STYLE
     video_quality: VideoQualityEnum = VideoQualityEnum.MEDIUM
     subtitle_layout: SubtitleLayoutEnum = SubtitleLayoutEnum.ORIGINAL_ON_TOP
@@ -647,12 +665,18 @@ class SynthesisConfig:
     ass_style: str = ""  # ASS 样式字符串
     rounded_style: Optional[dict] = None  # 圆角背景样式配置
 
+    def __post_init__(self):
+        if self.soft_subtitle_format is None:
+            self.soft_subtitle_format = SoftSubtitleFormatEnum.SRT
+
     def print_config(self) -> str:
         """Print video synthesis configuration"""
         lines = ["=========== Video Synthesis Task ==========="]
         lines.append(f"Generate Video: {self.need_video}")
         if self.need_video:
             lines.append(f"Subtitle Type: {'Soft' if self.soft_subtitle else 'Hard'}")
+            if self.soft_subtitle:
+                lines.append(f"Soft Subtitle Format: {self.soft_subtitle_format.value}")
             if not self.soft_subtitle:
                 lines.append(f"Render Mode: {self.render_mode.value}")
             lines.append(f"Video Quality: {self.video_quality.value}")
@@ -798,6 +822,7 @@ class BatchTaskStatus(Enum):
     RUNNING = "处理中"
     COMPLETED = "已完成"
     FAILED = "失败"
+    SKIPPED = "已跳过"
 
     def __str__(self):
         return self.value

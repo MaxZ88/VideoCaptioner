@@ -148,6 +148,14 @@ class SettingInterface(ScrollArea):
             cfg.soft_subtitle,
             self.subtitleGroup,
         )
+        self.softSubtitleFormatCard = ComboBoxSettingCard(
+            cfg.soft_subtitle_format,
+            FIF.FONT,
+            self.tr("软字幕格式"),
+            self.tr("选择软字幕的输出格式"),
+            texts=[fmt.value.upper() for fmt in cfg.soft_subtitle_format.validator.options],  # type: ignore
+            parent=self.subtitleGroup,
+        )
         self.videoQualityCard = ComboBoxSettingCard(
             cfg.video_quality,
             FIF.SPEED_HIGH,
@@ -163,6 +171,13 @@ class SettingInterface(ScrollArea):
             FIF.SAVE,
             self.tr("工作目录路径"),
             cfg.get(cfg.work_dir),
+            self.saveGroup,
+        )
+        self.skipExistingSubtitleCard = SwitchSettingCard(
+            FIF.SKIP,
+            self.tr("跳过已有字幕"),
+            self.tr("批量处理时自动跳过已存在字幕文件的文件"),
+            cfg.skip_existing_subtitle,
             self.saveGroup,
         )
 
@@ -195,14 +210,6 @@ class SettingInterface(ScrollArea):
             self.tr("界面缩放"),
             self.tr("更改小部件和字体的大小"),
             texts=["100%", "125%", "150%", "175%", "200%", self.tr("使用系统设置")],
-            parent=self.personalGroup,
-        )
-        self.languageCard = ComboBoxSettingCard(
-            cfg.language,
-            FIF.LANGUAGE,
-            self.tr("语言"),
-            self.tr("设置您偏好的界面语言"),
-            texts=["简体中文", "繁體中文", "English", self.tr("使用系统设置")],
             parent=self.personalGroup,
         )
 
@@ -244,15 +251,16 @@ class SettingInterface(ScrollArea):
         self.subtitleGroup.addSettingCard(self.subtitleLayoutCard)
         self.subtitleGroup.addSettingCard(self.needVideoCard)
         self.subtitleGroup.addSettingCard(self.softSubtitleCard)
+        self.subtitleGroup.addSettingCard(self.softSubtitleFormatCard)
         self.subtitleGroup.addSettingCard(self.videoQualityCard)
 
         self.saveGroup.addSettingCard(self.savePathCard)
+        self.saveGroup.addSettingCard(self.skipExistingSubtitleCard)
         self.saveGroup.addSettingCard(self.cacheEnabledCard)
 
         self.personalGroup.addSettingCard(self.themeCard)
         self.personalGroup.addSettingCard(self.themeColorCard)
         self.personalGroup.addSettingCard(self.zoomCard)
-        self.personalGroup.addSettingCard(self.languageCard)
 
         self.aboutGroup.addSettingCard(self.helpCard)
         self.aboutGroup.addSettingCard(self.feedbackCard)
@@ -512,6 +520,15 @@ class SettingInterface(ScrollArea):
             self.translate_serviceGroup,
         )
 
+        # 人名统一开关
+        self.needUnifyNamesCard = SwitchSettingCard(
+            FIF.SYNC,
+            self.tr("启用人名统一"),
+            self.tr("在翻译前提取并统一人名翻译，确保全文人名翻译一致"),
+            cfg.need_unify_names,
+            self.translate_serviceGroup,
+        )
+
         # DeepLx端点配置
         self.deeplxEndpointCard = LineEditSettingCard(
             cfg.deeplx_endpoint,
@@ -531,6 +548,24 @@ class SettingInterface(ScrollArea):
             parent=self.translate_serviceGroup,
         )
 
+        # 动态批处理开关
+        self.useDynamicBatchCard = SwitchSettingCard(
+            FIF.SYNC,
+            self.tr("动态批处理"),
+            self.tr("根据目标token限制动态计算每批大小，避免超出模型上下文限制"),
+            cfg.use_dynamic_batch,
+            self.translate_serviceGroup,
+        )
+
+        # 目标Token限制配置
+        self.targetTokenLimitCard = RangeSettingCard(
+            cfg.target_token_limit,
+            FIF.DOCUMENT,
+            self.tr("目标Token限制"),
+            self.tr("每批字幕的目标token数量，建议根据模型的上下文限制设置"),
+            parent=self.translate_serviceGroup,
+        )
+
         # 线程数配置
         self.threadNumCard = RangeSettingCard(
             cfg.thread_num,
@@ -545,8 +580,11 @@ class SettingInterface(ScrollArea):
         # 添加卡片到翻译服务组
         self.translate_serviceGroup.addSettingCard(self.translatorServiceCard)
         self.translate_serviceGroup.addSettingCard(self.needReflectTranslateCard)
+        self.translate_serviceGroup.addSettingCard(self.needUnifyNamesCard)
         self.translate_serviceGroup.addSettingCard(self.deeplxEndpointCard)
         self.translate_serviceGroup.addSettingCard(self.batchSizeCard)
+        self.translate_serviceGroup.addSettingCard(self.useDynamicBatchCard)
+        self.translate_serviceGroup.addSettingCard(self.targetTokenLimitCard)
         self.translate_serviceGroup.addSettingCard(self.threadNumCard)
 
         # 初始化显示状态
@@ -573,6 +611,9 @@ class SettingInterface(ScrollArea):
         self.__onTranslatorServiceChanged(
             self.translatorServiceCard.comboBox.currentText()
         )
+
+        # 初始化动态批处理开关状态
+        self.__onDynamicBatchChanged(cfg.use_dynamic_batch.value)
 
         self.setStyleSheet(
             """        
@@ -664,6 +705,11 @@ class SettingInterface(ScrollArea):
         self.cacheEnabledCard.checkedChanged.connect(self.__onCacheEnabledChanged)
         self.themeCard.optionChanged.connect(lambda ci: setTheme(cfg.get(ci)))
         self.themeColorCard.colorChanged.connect(setThemeColor)
+
+        # 动态批处理开关
+        self.useDynamicBatchCard.checkedChanged.connect(
+            self.__onDynamicBatchChanged
+        )
 
         # 反馈
         self.feedbackCard.clicked.connect(
@@ -863,7 +909,10 @@ class SettingInterface(ScrollArea):
     def __onTranslatorServiceChanged(self, service):
         openai_cards = [
             self.needReflectTranslateCard,
+            self.needUnifyNamesCard,
             self.batchSizeCard,
+            self.useDynamicBatchCard,
+            self.targetTokenLimitCard,
         ]
         deeplx_cards = [self.deeplxEndpointCard]
 
@@ -878,6 +927,14 @@ class SettingInterface(ScrollArea):
         elif service in [TranslatorServiceEnum.OPENAI.value]:
             for card in openai_cards:
                 card.setVisible(True)
+        # 更新布局
+        self.translate_serviceGroup.adjustSize()
+        self.expandLayout.update()
+
+    def __onDynamicBatchChanged(self, checked: bool):
+        """处理动态批处理开关变化"""
+        self.targetTokenLimitCard.setVisible(checked)
+        self.batchSizeCard.setVisible(not checked)
 
         # 更新布局
         self.translate_serviceGroup.adjustSize()

@@ -1,13 +1,16 @@
 import queue
 import time
 from functools import partial
+from pathlib import Path
 from typing import Dict, Optional
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from app.common.config import cfg
 from app.core.entities import (
     BatchTaskStatus,
     BatchTaskType,
+    SupportedSubtitleFormats,
     TranscribeTask,
 )
 from app.core.task_factory import TaskFactory
@@ -70,12 +73,58 @@ class BatchProcessThread(QThread):
             else:
                 time.sleep(0.1)
 
+    def _check_subtitle_exists(self, file_path: str, task_type: BatchTaskType) -> bool:
+        """检查字幕文件是否已存在
+
+        Args:
+            file_path: 输入文件路径
+            task_type: 任务类型
+
+        Returns:
+            True 如果字幕文件已存在，否则 False
+        """
+        try:
+            file_path_obj = Path(file_path)
+            file_name = file_path_obj.stem
+
+            if task_type in [BatchTaskType.TRANSCRIBE, BatchTaskType.TRANS_SUB, BatchTaskType.FULL_PROCESS]:
+                if task_type == BatchTaskType.TRANSCRIBE:
+                    output_path = file_path_obj.parent / f"{file_name}.srt"
+                else:
+                    output_path = (
+                        Path(cfg.work_dir.value)
+                        / file_name
+                        / "subtitle"
+                        / f"【原始字幕】{file_name}-{cfg.transcribe_model.value.value}-{cfg.transcribe_language.value.value}.srt"
+                    )
+                return output_path.exists()
+
+            elif task_type == BatchTaskType.SUBTITLE:
+                output_name = file_name.replace("【原始字幕】", "").replace("【下载字幕】", "")
+                suffix = f"-{cfg.translator_service.value.value}" if cfg.need_translate.value else ""
+                output_path = file_path_obj.parent / f"【字幕】{output_name}{suffix}.srt"
+                return output_path.exists()
+
+            return False
+        except Exception as e:
+            logger.warning(f"检查字幕文件是否存在时出错: {str(e)}")
+            return False
+
     def _process_task(self, batch_task: BatchTask):
         try:
             batch_task.status = BatchTaskStatus.RUNNING
             self.task_progress.emit(
                 batch_task.file_path, 0, str(BatchTaskStatus.RUNNING)
             )
+
+            if cfg.skip_existing_subtitle.value:
+                if self._check_subtitle_exists(batch_task.file_path, batch_task.task_type):
+                    logger.info(f"跳过已存在字幕的文件: {batch_task.file_path}")
+                    batch_task.status = BatchTaskStatus.SKIPPED
+                    batch_task.progress = 100
+                    self.task_progress.emit(batch_task.file_path, 100, str(BatchTaskStatus.SKIPPED))
+                    self.task_completed.emit(batch_task.file_path)
+                    return
 
             if batch_task.task_type == BatchTaskType.TRANSCRIBE:
                 self._handle_transcribe_task(batch_task)
