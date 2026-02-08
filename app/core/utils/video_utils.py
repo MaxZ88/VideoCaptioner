@@ -79,7 +79,36 @@ def video2audio(input_file: str, output: str = "", audio_track_index: int = 0) -
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output = str(output_path)
 
-    logger.info(f"提取音轨索引 {audio_track_index}")
+    # 先检查视频是否有音频流
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-i", input_file],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+            ),
+        )
+        info = result.stderr
+        
+        # 检查是否有音频流
+        audio_streams = list(re.finditer(r"Stream #\d+:\d+.*Audio:", info))
+        if not audio_streams:
+            logger.error("视频文件没有音频流")
+            return False
+        
+        # 检查指定的音轨索引是否有效
+        if audio_track_index >= len(audio_streams):
+            logger.error(f"指定的音轨索引 {audio_track_index} 超出范围，视频只有 {len(audio_streams)} 条音轨")
+            return False
+        
+        logger.info(f"提取音轨索引 {audio_track_index}")
+    except Exception as e:
+        logger.exception(f"检查音频流时出错: {str(e)}")
+        return False
+
     cmd = [
         "ffmpeg",
         "-i",
