@@ -174,7 +174,7 @@ class SettingInterface(ScrollArea):
             self.saveGroup,
         )
         self.skipExistingSubtitleCard = SwitchSettingCard(
-            FIF.SKIP,
+            FIF.FAST_FORWARD,
             self.tr("跳过已有字幕"),
             self.tr("批量处理时自动跳过已存在字幕文件的文件"),
             cfg.skip_existing_subtitle,
